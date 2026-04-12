@@ -1,11 +1,5 @@
 package com.example.contextextractortu.model
 
-data class AiContextReport(
-    val targetMethod: TargetMethod,
-    val classUnderTest: ClassContext,
-    val dependencies: List<ClassContext>
-)
-
 data class TargetMethod(
     val className: String,
     val methodName: String,

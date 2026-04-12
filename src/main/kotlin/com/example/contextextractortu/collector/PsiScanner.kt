@@ -1,5 +1,5 @@
 package com.example.contextextractortu.collector
-
+// API IntelliJ pour l'analyse de code Java
 import com.example.contextextractortu.model.*
 import com.intellij.psi.JavaRecursiveElementVisitor
 import com.intellij.psi.PsiClass
