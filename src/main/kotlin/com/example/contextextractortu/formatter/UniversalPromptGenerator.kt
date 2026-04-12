@@ -4,9 +4,11 @@ import com.example.contextextractortu.model.GenericContextModel
 
 class UniversalPromptGenerator {
     fun generate(model: GenericContextModel, template: String): String {
-        val contextSection = model.items.joinToString("\n\n") { item ->
-            "### ${item.title}\n${item.content}"
+        var finalPrompt = template
+        model.items.forEach { item ->
+            // Remplace {{titre}} par le contenu de l'item
+            finalPrompt = finalPrompt.replace("{{${item.title}}}", item.content)
         }
-        return template.replace("{{CONTEXT}}", contextSection)
+        return finalPrompt
     }
 }

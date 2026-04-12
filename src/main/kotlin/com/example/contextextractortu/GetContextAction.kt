@@ -1,27 +1,20 @@
 package com.example.contextextractortu
 
-import com.example.contextextractortu.collector.PsiScanner
-import com.example.contextextractortu.formatter.MarkdownFormatter
-import com.example.contextextractortu.formatter.PromptTemplateEngine
-import com.example.contextextractortu.model.AiContextReport
+import com.example.contextextractortu.collector.ContextSearcher
+import com.example.contextextractortu.formatter.UniversalPromptGenerator
+import com.example.contextextractortu.strategy.UnitTestStrategy
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.ui.Messages
 import com.intellij.psi.PsiJavaFile
-import com.intellij.psi.PsiMethod
-import com.intellij.psi.util.PsiTreeUtil
 
 class GetContextAction : AnAction() {
 
     override fun getActionUpdateThread(): ActionUpdateThread {
         return ActionUpdateThread.BGT
     }
-
-    // On initialise nos composants
-    private val scanner = PsiScanner()
-    private val formatter = MarkdownFormatter(PromptTemplateEngine())
 
     override fun update(e: AnActionEvent) {
         // L'action n'est visible que si on est dans un fichier Java/Kotlin
@@ -32,38 +25,39 @@ class GetContextAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
-        val psiFile = e.getData(CommonDataKeys.PSI_FILE) ?: return
 
-        // 1. Trouver où est le curseur
-        val offset = editor.caretModel.offset
-        val elementAtCaret = psiFile.findElementAt(offset)
-        val method = PsiTreeUtil.getParentOfType(elementAtCaret, PsiMethod::class.java)
+        // 1. Initialisation des composants de la nouvelle architecture
+        // Le searcher utilise ton PsiScanner interne pour extraire les données
+        val searcher = ContextSearcher(project)
+        val strategy = UnitTestStrategy()
+        val generator = UniversalPromptGenerator()
 
-        if (method == null) {
-            Messages.showWarningDialog(project, "Place ton curseur dans une méthode !", "Erreur")
+        // 2. COLLECTE : On lance la stratégie de recherche
+        // gather() appelle en interne strategy.execute(project, editor, scanner)
+        val genericModel = searcher.gather(strategy, editor)
+
+        // Vérification rapide si la stratégie a trouvé du contenu
+        if (genericModel.items.isEmpty()) {
+            Messages.showWarningDialog(project, "Aucun contexte trouvé. Place ton curseur dans une méthode !", "Erreur")
             return
         }
 
-        // 2. COLLECTE (Orchestration)
-        // On récupère la classe parente
-        val parentClass = method.containingClass ?: return
+        // 3. CHARGEMENT DU TEMPLATE
+        // Ici, tu peux charger le texte de ton fichier 'example.md'
+        // Pour l'instant, voici une simulation du chargement :
+        val templateContent = """
+        # CONTEXTE
+        Classe : {{className}}
+        Code de la méthode :
+        {{methodCode}}
+        Appels détectés :
+        {{methodCalls}}
+    """.trimIndent()
 
-        // On construit le rapport via le scanner
-        val targetMethodModel = scanner.extractTargetMethod(method)
-        val mainClassContext = scanner.extractClassContext(parentClass)
+        // 4. GÉNÉRATION ET AFFICHAGE
+        // Le générateur remplace les {{titre}} par le contenu des items du modèle
+        val finalPrompt = generator.generate(genericModel, templateContent)
 
-        // Pour l'instant, on laisse les dépendances vides ou on en ajoute quelques-unes
-        val report = AiContextReport(
-            targetMethod = targetMethodModel,
-            classUnderTest = mainClassContext,
-            dependencies = emptyList() // On améliorera le ClassResolver après
-        )
-
-        // 3. FORMATAGE
-        val markdown = formatter.generate(report)
-
-        // 4. AFFICHAGE
-        // Au lieu d'une simple popup, on pourrait copier dans le presse-papier plus tard
-        Messages.showInfoMessage(project, markdown, "Contexte IA Généré")
+        Messages.showInfoMessage(project, finalPrompt, "Contexte IA Généré (Version Générique)")
     }
 }
