@@ -1,5 +1,5 @@
 package com.example.contextextractortu.collector
-// API IntelliJ pour l'analyse de code Java
+
 import com.example.contextextractortu.model.*
 import com.intellij.psi.JavaRecursiveElementVisitor
 import com.intellij.psi.PsiClass
@@ -40,5 +40,27 @@ class PsiScanner {
                 MethodSignature(m.name, m.parameterList.parameters.map { it.type.presentableText })
             }
         )
+    }
+
+    /**
+     * Extrait la liste des appels de méthodes d'une méthode donnée
+     * Utilisé par DeepExtractionStrategy pour l'analyse du flux (Étape C)
+     */
+    fun extractMethodCalls(method: PsiMethod): List<MethodCall> {
+        val calls = mutableSetOf<MethodCall>()
+
+        method.accept(object : JavaRecursiveElementVisitor() {
+            override fun visitMethodCallExpression(expression: PsiMethodCallExpression) {
+                super.visitMethodCallExpression(expression)
+                val resolved = expression.resolveMethod()
+                if (resolved != null) {
+                    val className = resolved.containingClass?.qualifiedName ?: resolved.containingClass?.name ?: "Unknown"
+                    val methodName = expression.methodExpression.referenceName ?: resolved.name
+                    calls.add(MethodCall(className, methodName))
+                }
+            }
+        })
+
+        return calls.toList()
     }
 }

@@ -1,0 +1,393 @@
+Calculatrice.java :
+{
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+
+/**
+ * Classe principale à tester (SUT)
+ * Hérite de OperationBase et utilise des services externes
+ */
+public class Calculatrice extends OperationBase {
+
+    // Champs propres à Calculatrice
+    private final Historique historique;
+    private final ValidateurCalcul validateur;
+    private BigDecimal tauxTva;
+
+    // Constructeur avec @Autowired (simulé)
+    public Calculatrice(Historique historique, ValidateurCalcul validateur) {
+        super("Calculatrice");
+        this.historique = historique;
+        this.validateur = validateur;
+        this.tauxTva = new BigDecimal("0.20");
+    }
+
+    // Setter pour tauxTva
+    public void setTauxTva(BigDecimal tauxTva) {
+        this.tauxTva = tauxTva;
+    }
+
+    /**
+     * Calcul complexe utilisant héritage, services externes et méthodes internes
+     */
+    public CalculResultat calculerPanier(List<Item> items, boolean appliquerTva) {
+        // Appel à méthode externe (ValidateurCalcul)
+        if (!validateur.validerItems(items)) {
+            throw new IllegalArgumentException("Items invalides");
+        }
+
+        // Appel à méthode interne (héritée de OperationBase)
+        BigDecimal sousTotal = calculerSousTotal(items);
+
+        // Appel à méthode interne privée
+        BigDecimal montantTva = calculerTva(sousTotal, appliquerTva);
+
+        // Appel à méthode externe
+        BigDecimal totalFinal = historique.enregistrerCalcul(items, sousTotal, montantTva);
+
+        // Utilisation de méthode interne héritée
+        String nomCalcul = getNomOperation();
+
+        return new CalculResultat(nomCalcul, sousTotal, montantTva, totalFinal);
+    }
+
+    /**
+     * Méthode interne privée - doit être incluse dans le contexte
+     */
+    private BigDecimal calculerTva(BigDecimal base, boolean appliquer) {
+        if (!appliquer) {
+            return BigDecimal.ZERO;
+        }
+        return base.multiply(tauxTva).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Calcul avec gestion d'erreur interne
+     */
+    public BigDecimal calculerAvecArrondi(List<BigDecimal> valeurs, int decimales) {
+        // Appel à méthode interne héritée
+        if (validerValeurs(valeurs)) {
+            return arrondiResultat(valeurs, decimales);
+        }
+        return BigDecimal.ZERO;
+    }
+
+    /**
+     * Méthode statique utilitaire interne
+     */
+    public static boolean estNombreValid(double nombre) {
+        return !Double.isNaN(nombre) && !Double.isInfinite(nombre);
+    }
+
+    @Override
+    public void initialiserContexte() {
+        // Initialisation du contexte de calcul
+        this.tauxTva = new BigDecimal("0.20");
+    }
+}
+}
+
+CalculRecord.java :
+{
+
+import java.math.BigDecimal;
+import java.util.List;
+
+/**
+ * Classe de donnees pour un enregistrement de calcul
+ * Objet complexe utilise par le service Historique
+ */
+public class CalculRecord {
+
+    private List<Item> items;
+    private BigDecimal sousTotal;
+    private BigDecimal tva;
+    private BigDecimal total;
+    private long timestamp;
+
+    public CalculRecord(List<Item> items, BigDecimal sousTotal, BigDecimal tva, BigDecimal total) {
+        this.items = items;
+        this.sousTotal = sousTotal;
+        this.tva = tva;
+        this.total = total;
+        this.timestamp = System.currentTimeMillis();
+    }
+
+    public List<Item> getItems() {
+        return items;
+    }
+
+    public BigDecimal getSousTotal() {
+        return sousTotal;
+    }
+
+    public BigDecimal getTva() {
+        return tva;
+    }
+
+    public BigDecimal getTotal() {
+        return total;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
+    }
+}
+}
+CalculResultat.java :
+{
+
+import java.math.BigDecimal;
+
+/**
+ * Classe de resultat pour un calcul complet
+ * Objet complexe retourne par les methodes de calcul
+ */
+public class CalculResultat {
+
+    private String nomCalcul;
+    private BigDecimal sousTotal;
+    private BigDecimal montantTva;
+    private BigDecimal totalFinal;
+
+    public CalculResultat(String nomCalcul, BigDecimal sousTotal, BigDecimal montantTva, BigDecimal totalFinal) {
+        this.nomCalcul = nomCalcul;
+        this.sousTotal = sousTotal;
+        this.montantTva = montantTva;
+        this.totalFinal = totalFinal;
+    }
+
+    public String getNomCalcul() {
+        return nomCalcul;
+    }
+
+    public BigDecimal getSousTotal() {
+        return sousTotal;
+    }
+
+    public BigDecimal getMontantTva() {
+        return montantTva;
+    }
+
+    public BigDecimal getTotalFinal() {
+        return totalFinal;
+    }
+
+    /**
+     * Methode interne de formattage du resultat
+     */
+    public String formatResultat() {
+        return String.format("Calcul: %s | HT: %.2f | TVA: %.2f | TTC: %.2f",
+                nomCalcul, sousTotal, montantTva, totalFinal);
+    }
+}
+}
+Historique.java :
+{
+
+import java.math.BigDecimal;
+import java.util.List;
+
+/**
+ * Service externe - doit etre Mocke dans les tests
+ * Interface de stockage de l'historique des calculs
+ */
+public class Historique {
+
+    private List<CalculRecord> records;
+
+    public Historique(List<CalculRecord> records) {
+        this.records = records;
+    }
+
+    /**
+     * Methode externe - seule la signature est necessaire pour le mock
+     */
+    public BigDecimal enregistrerCalcul(List<Item> items, BigDecimal sousTotal, BigDecimal tva) {
+        // Implementation reelle non necessaire pour le test
+        BigDecimal total = sousTotal.add(tva);
+        records.add(new CalculRecord(items, sousTotal, tva, total));
+        return total;
+    }
+
+    /**
+     * Methode externe pour recuperer l'historique
+     */
+    public List<CalculRecord> getRecords() {
+        return records;
+    }
+
+    /**
+     * Methode externe pour compter les enregistrements
+     */
+    public int getNombreRecords() {
+        return records.size();
+    }
+}
+}
+Item.java :
+{
+
+/**
+ * Classe de donnees pour un item de panier
+ * Objet complexe a instancier pour les tests
+ */
+public class Item {
+
+    private String nom;
+    private java.math.BigDecimal prix;
+    private int quantite;
+
+    public Item(String nom, java.math.BigDecimal prix, int quantite) {
+        this.nom = nom;
+        this.prix = prix;
+        this.quantite = quantite;
+    }
+
+    public String getNom() {
+        return nom;
+    }
+
+    public java.math.BigDecimal getPrix() {
+        return prix;
+    }
+
+    public int getQuantite() {
+        return quantite;
+    }
+
+    /**
+     * Methode interne de calcul de total pour l'item
+     */
+    public java.math.BigDecimal getTotal() {
+        return prix.multiply(new java.math.BigDecimal(quantite));
+    }
+}
+}
+OperationBase.java :
+{
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+
+/**
+ * Classe mere (Super-class) - fait partie des "Internes"
+ * Contient des methodes qui seront appelees par Calculatrice
+ */
+public abstract class OperationBase {
+
+    private String nomOperation;
+    protected int compteurAppels;
+
+    public OperationBase(String nomOperation) {
+        this.nomOperation = nomOperation;
+        this.compteurAppels = 0;
+    }
+
+    /**
+     * Methode interne publique - doit etre recuperee dans le contexte
+     */
+    public BigDecimal calculerSousTotal(List<Item> items) {
+        compteurAppels++;
+        BigDecimal total = BigDecimal.ZERO;
+        for (Item item : items) {
+            total = total.add(item.getPrix().multiply(new BigDecimal(item.getQuantite())));
+        }
+        return total.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Methode interne protegee - doit etre recuperee
+     */
+    protected boolean validerValeurs(List<BigDecimal> valeurs) {
+        if (valeurs == null || valeurs.isEmpty()) {
+            return false;
+        }
+        for (BigDecimal val : valeurs) {
+            if (val == null || val.compareTo(BigDecimal.ZERO) < 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Methode interne de formattage
+     */
+    protected BigDecimal arrondiResultat(List<BigDecimal> valeurs, int decimales) {
+        BigDecimal somme = BigDecimal.ZERO;
+        for (BigDecimal val : valeurs) {
+            somme = somme.add(val);
+        }
+        return somme.setScale(decimales, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Getter pour nomOperation - methode interne simple
+     */
+    public String getNomOperation() {
+        return nomOperation;
+    }
+
+    /**
+     * Methode abstraite - les implementations externes ne sont pas connues
+     */
+    public abstract void initialiserContexte();
+}
+}
+ValidateurCalcul.java :
+{
+
+import java.util.List;
+
+/**
+ * Service externe de validation - doit etre Mocke dans les tests
+ * Interface pour valider les donnees de calcul
+ */
+public class ValidateurCalcul {
+
+    private boolean modeStrict;
+
+    public ValidateurCalcul(boolean modeStrict) {
+        this.modeStrict = modeStrict;
+    }
+
+    /**
+     * Methode externe de validation - signature seulement pour le mock
+     */
+    public boolean validerItems(List<Item> items) {
+        if (items == null) {
+            return false;
+        }
+        if (modeStrict && items.isEmpty()) {
+            return false;
+        }
+        // Validation reelle non necessaire pour le test
+        return true;
+    }
+
+    /**
+     * Methode externe pour valider un montant
+     */
+    public boolean validerMontant(java.math.BigDecimal montant) {
+        return montant != null && montant.compareTo(java.math.BigDecimal.ZERO) >= 0;
+    }
+
+    /**
+     * Methode externe pour valider le taux
+     */
+    public boolean validerTaux(double taux) {
+        return taux >= 0 && taux <= 1;
+    }
+
+    /**
+     * Methode externe pour reset de validation
+     */
+    public void resetValidation() {
+        // Implementation reelle non necessaire
+    }
+}
+}

@@ -1,8 +1,8 @@
 package com.example.contextextractortu
 
 import com.example.contextextractortu.collector.ContextSearcher
+import com.example.contextextractortu.collector.PsiScanner
 import com.example.contextextractortu.formatter.UniversalPromptGenerator
-import com.example.contextextractortu.strategy.UnitTestStrategy
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -17,7 +17,6 @@ class GetContextAction : AnAction() {
     }
 
     override fun update(e: AnActionEvent) {
-        // L'action n'est visible que si on est dans un fichier Java/Kotlin
         val psiFile = e.getData(CommonDataKeys.PSI_FILE)
         e.presentation.isEnabledAndVisible = psiFile is PsiJavaFile
     }
@@ -26,38 +25,64 @@ class GetContextAction : AnAction() {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
 
-        // 1. Initialisation des composants de la nouvelle architecture
-        // Le searcher utilise ton PsiScanner interne pour extraire les données
+        // Initialisation des composants
+        val scanner = PsiScanner()
         val searcher = ContextSearcher(project)
-        val strategy = UnitTestStrategy()
         val generator = UniversalPromptGenerator()
 
-        // 2. COLLECTE : On lance la stratégie de recherche
-        // gather() appelle en interne strategy.execute(project, editor, scanner)
-        val genericModel = searcher.gather(strategy, editor)
+        // 1. COLLECTE : Extraction du contexte (DeepExtractionStrategy est la seule stratégie)
+        val genericModel = searcher.gather(editor, scanner)
 
-        // Vérification rapide si la stratégie a trouvé du contenu
+        // Vérification si du contenu a été trouvé
         if (genericModel.items.isEmpty()) {
             Messages.showWarningDialog(project, "Aucun contexte trouvé. Place ton curseur dans une méthode !", "Erreur")
             return
         }
 
-        // 3. CHARGEMENT DU TEMPLATE
-        // Ici, tu peux charger le texte de ton fichier 'example.md'
-        // Pour l'instant, voici une simulation du chargement :
-        val templateContent = """
-        # CONTEXTE
-        Classe : {{className}}
-        Code de la méthode :
-        {{methodCode}}
-        Appels détectés :
-        {{methodCalls}}
-    """.trimIndent()
+        // 2. CHARGEMENT DU TEMPLATE
+        val templateContent = TemplateManager.loadTemplate("deep-unit-test")
 
-        // 4. GÉNÉRATION ET AFFICHAGE
-        // Le générateur remplace les {{titre}} par le contenu des items du modèle
-        val finalPrompt = generator.generate(genericModel, templateContent)
+        if (templateContent == null) {
+            Messages.showWarningDialog(
+                project,
+                "Template 'deep-unit-test' non trouvé.",
+                "Erreur"
+            )
+            return
+        }
 
-        Messages.showInfoMessage(project, finalPrompt, "Contexte IA Généré (Version Générique)")
+        // 3. Demander des instructions utilisateur optionnelles
+        val userInstructions = Messages.showInputDialog(
+            project,
+            "Instructions spécifiques pour le test (optionnel) :\n\n" +
+                    "Ex: Teste le cas où l'email est invalide\n" +
+                    "Laisser vide pour utiliser les instructions par défaut",
+            "Instructions Utilisateur",
+            Messages.getQuestionIcon()
+        )
+
+        // 4. GÉNÉRATION DU PROMPT
+        val finalPrompt = if (userInstructions.isNullOrBlank()) {
+            // Utiliser un prompt par défaut quand pas d'instructions utilisateur
+            generator.generateWithDefaultPrompt(genericModel, templateContent)
+        } else {
+            generator.generateWithLayers(genericModel, getDefaultSystemPrompt(), userInstructions)
+        }
+
+        // 5. AFFICHAGE AVEC OPTION DE COPIE
+        showPromptWithCopyOption(project, finalPrompt)
+    }
+
+    /**
+     * Affiche le prompt généré avec une option pour le copier dans le presse-papier
+     */
+    private fun showPromptWithCopyOption(project: com.intellij.openapi.project.Project, prompt: String) {
+        // Afficher le prompt dans une boîte de dialogue avec bouton copier
+        val dialog = PromptCopyDialog(project, prompt)
+        dialog.show()
+    }
+
+    private fun getDefaultSystemPrompt(): String {
+        return "Tu es un expert en génération de tests unitaires Java avec JUnit 5 et Mockito."
     }
 }
